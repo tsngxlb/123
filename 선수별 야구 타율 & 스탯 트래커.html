@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>선수별 프로야구 타율 & 스탯 트래커</title>
+    <!-- Tailwind CSS 로드 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Pretendard & JetBrains Mono -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'Roboto', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                    },
+                    colors: {
+                        stadium: {
+                            950: '#090d16',
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            700: '#334155',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        
+        @keyframes popIn {
+            0% { transform: scale(0.95); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop {
+            animation: popIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .btn-press:active {
+            transform: scale(0.96);
+        }
+
+        .tabular-nums {
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* 가로 스크롤 영역 스크롤바 숨김 처리 (선수 탭 바용) */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-stadium-950 text-slate-100 font-sans min-h-screen flex flex-col selection:bg-emerald-500 selection:text-white">
+
+    <!-- 상단 헤더 -->
+    <header class="bg-stadium-900/95 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
+                    <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M6.3 5.3c2.5 2.5 2.5 10.9 0 13.4"></path>
+                        <path d="M17.7 5.3c-2.5 2.5-2.5 10.9 0 13.4"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                        선수별 타격 스탯 트래커
+                        <span class="text-[10px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">TEAM & PLAYER</span>
+                    </h1>
+                    <p class="text-xs text-slate-400 hidden sm:block">선수를 선택해 타석 결과를 누적 기록하고 팀 전체 성적을 비교하세요</p>
+                </div>
+            </div>
+
+            <!-- 상단 뷰 전환 및 액션 버튼 -->
+            <div class="flex items-center gap-2">
+                <!-- 뷰 모드 토글 (개인 기록 vs 전체 리더보드) -->
+                <div class="bg-slate-950 p-1 rounded-xl border border-slate-800 flex items-center">
+                    <button id="tab-view-individual" onclick="switchViewMode('individual')"
+                        class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-emerald-600 text-white shadow">
+                        개인 기록 입력
+                    </button>
+                    <button id="tab-view-leaderboard" onclick="switchViewMode('leaderboard')"
+                        class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-white flex items-center gap-1">
+                        <i data-lucide="trophy" class="w-3.5 h-3.5 text-amber-400"></i>
+                        <span>팀 성적표</span>
+                    </button>
+                </div>
+
+                <button onclick="exportToCSV()"
+                    class="btn-press hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all"
+                    title="전체 선수 기록 CSV 다운로드">
+                    <i data-lucide="download" class="w-3.5 h-3.5 text-sky-400"></i>
+                    <span>CSV 내보내기</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 선수 선택 바 (가로 스크롤 지원) -->
+        <div class="bg-slate-950/80 border-t border-slate-800/80">
+            <div class="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-2.5">
+                <!-- 새 선수 추가 버튼 -->
+                <button onclick="openPlayerModal('add')"
+                    class="btn-press shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 transition-all">
+                    <i data-lucide="user-plus" class="w-4 h-4"></i>
+                    <span>선수 추가</span>
+                </button>
+
+                <div class="h-6 w-[1px] bg-slate-800 shrink-0"></div>
+
+                <!-- 등록된 선수 탭 목록 -->
+                <div id="player-tabs-container" class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 flex-1">
+                    <!-- JS로 동적 생성 -->
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 메인 컨테이너 -->
+    <main class="flex-1 max-w-6xl w-full mx-auto px-4 py-5 space-y-6">
+
+        <!-- ========================================================= -->
+        <!-- [뷰 1] 선택된 선수 개인 기록 입력 및 누적 대시보드 -->
+        <!-- ========================================================= -->
+        <div id="view-individual" class="space-y-6">
+            
+            <!-- 현재 선택된 선수 프로필 & 관리 컨트롤 배너 -->
+            <section class="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800/90 border border-slate-800 rounded-2xl p-4 sm:px-6 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg">
+                <div class="flex items-center gap-3.5">
+                    <!-- 등번호 뱃지 -->
+                    <div id="active-player-number-badge" class="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-950 border-2 border-emerald-500/50 flex flex-col items-center justify-center shadow-inner shrink-0">
+                        <span class="text-[9px] text-emerald-400 font-bold leading-none">NO.</span>
+                        <span id="active-player-number" class="font-mono text-lg sm:text-xl font-extrabold text-white leading-tight">00</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <h2 id="active-player-name" class="text-lg sm:text-xl font-extrabold text-white tracking-tight">선수 이름</h2>
+                            <span id="active-player-position" class="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                                포지션
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1 flex items-center gap-2">
+                            <span>현재 선택된 타자</span>
+                            <span class="text-slate-600">•</span>
+                            <span id="active-player-summary-line" class="text-slate-300 font-medium">0타석 0타수 0안타</span>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 선택 선수 관리 버튼 (정보 수정 / 직전 취소 / 기록 초기화 / 선수 삭제) -->
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button onclick="openPlayerModal('edit')"
+                        class="btn-press flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all"
+                        title="선수 이름/등번호 수정">
+                        <i data-lucide="edit-3" class="w-3.5 h-3.5 text-sky-400"></i>
+                        <span>정보 수정</span>
+                    </button>
+                    <button id="btn-undo" onclick="undoLastAtBat()" disabled
+                        class="btn-press flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-slate-200 border border-slate-700 transition-all"
+                        title="이 선수의 직전 타석 취소">
+                        <i data-lucide="undo-2" class="w-3.5 h-3.5 text-amber-400"></i>
+                        <span>직전 취소</span>
+                    </button>
+                    <button id="btn-reset-player" onclick="openConfirmModal('resetPlayer')" disabled
+                        class="btn-press flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-amber-500/10 hover:bg-amber-500/20 disabled:opacity-40 disabled:pointer-events-none text-amber-300 border border-amber-500/30 transition-all"
+                        title="이 선수의 타석 기록만 초기화">
+                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                        <span>기록 초기화</span>
+                    </button>
+                    <button id="btn-delete-player" onclick="openConfirmModal('deletePlayer')"
+                        class="btn-press flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-rose-500/10 hover:bg-rose-500/20 disabled:opacity-40 disabled:pointer-events-none text-rose-400 border border-rose-500/30 transition-all"
+                        title="이 선수 삭제">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        <span class="hidden sm:inline">선수 삭제</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- 실시간 누적 스탯 대시보드 -->
+            <section aria-label="실시간 누적 타격 지표">
+                <!-- 메인 4대 지표 카드 (AVG, OBP, SLG, OPS) -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                    <!-- 타율 (AVG) -->
+                    <div class="bg-gradient-to-b from-slate-800/90 to-slate-900 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 relative overflow-hidden shadow-lg">
+                        <div class="absolute top-0 right-0 w-20 h-20 bg-emerald-500/10 rounded-full blur-2xl -mr-6 -mt-6"></div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-emerald-400">타율 (AVG)</span>
+                            <span class="text-[11px] text-slate-400">안타 / 타수</span>
+                        </div>
+                        <div id="stat-avg" class="font-mono tabular-nums text-3xl sm:text-4xl font-extrabold text-white tracking-tight mt-1">
+                            .000
+                        </div>
+                        <div id="stat-avg-sub" class="text-xs text-slate-400 mt-2 font-mono tabular-nums">
+                            0안타 / 0타수
+                        </div>
+                    </div>
+
+                    <!-- 출루율 (OBP) -->
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-md">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-amber-400">출루율 (OBP)</span>
+                            <span class="text-[11px] text-slate-500">출루 / 기준타석</span>
+                        </div>
+                        <div id="stat-obp" class="font-mono tabular-nums text-3xl sm:text-4xl font-bold text-slate-100 tracking-tight mt-1">
+                            .000
+                        </div>
+                        <div id="stat-obp-sub" class="text-xs text-slate-400 mt-2 font-mono tabular-nums">
+                            총 출루 0회
+                        </div>
+                    </div>
+
+                    <!-- 장타율 (SLG) -->
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-md">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-sky-400">장타율 (SLG)</span>
+                            <span class="text-[11px] text-slate-500">총루타 / 타수</span>
+                        </div>
+                        <div id="stat-slg" class="font-mono tabular-nums text-3xl sm:text-4xl font-bold text-slate-100 tracking-tight mt-1">
+                            .000
+                        </div>
+                        <div id="stat-slg-sub" class="text-xs text-slate-400 mt-2 font-mono tabular-nums">
+                            총 0루타
+                        </div>
+                    </div>
+
+                    <!-- OPS (OBP + SLG) -->
+                    <div class="bg-gradient-to-b from-slate-800/80 to-slate-900 border border-indigo-500/30 rounded-2xl p-4 sm:p-5 relative overflow-hidden shadow-lg">
+                        <div class="absolute top-0 right-0 w-20 h-20 bg-indigo-500/10 rounded-full blur-2xl -mr-6 -mt-6"></div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-indigo-400">OPS</span>
+                            <span class="text-[11px] text-slate-400">출루율 + 장타율</span>
+                        </div>
+                        <div id="stat-ops" class="font-mono tabular-nums text-3xl sm:text-4xl font-extrabold text-indigo-300 tracking-tight mt-1">
+                            .000
+                        </div>
+                        <div id="stat-ops-grade" class="text-xs text-slate-400 mt-2 truncate">
+                            기록 대기 중
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 세부 카운트 바 -->
+                <div class="mt-3 bg-slate-900/90 border border-slate-800 rounded-2xl p-3 sm:px-5 sm:py-3.5 grid grid-cols-4 sm:grid-cols-7 gap-2 text-center">
+                    <div class="p-1.5 rounded-xl bg-slate-800/50">
+                        <div class="text-[11px] text-slate-400 font-medium">타석 (PA)</div>
+                        <div id="count-pa" class="font-mono tabular-nums text-base sm:text-lg font-bold text-white mt-0.5">0</div>
+                    </div>
+                    <div class="p-1.5 rounded-xl bg-slate-800/50">
+                        <div class="text-[11px] text-slate-400 font-medium">타수 (AB)</div>
+                        <div id="count-ab" class="font-mono tabular-nums text-base sm:text-lg font-bold text-white mt-0.5">0</div>
+                    </div>
+                    <div class="p-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                        <div class="text-[11px] text-emerald-400 font-medium">안타 (H)</div>
+                        <div id="count-h" class="font-mono tabular-nums text-base sm:text-lg font-bold text-emerald-300 mt-0.5">0</div>
+                    </div>
+                    <div class="p-1.5 rounded-xl bg-slate-800/50">
+                        <div class="text-[11px] text-slate-400 font-medium">2루/3루타</div>
+                        <div id="count-xbh" class="font-mono tabular-nums text-base sm:text-lg font-bold text-sky-300 mt-0.5">0 / 0</div>
+                    </div>
+                    <div class="p-1.5 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                        <div class="text-[11px] text-blue-400 font-medium">홈런 (HR)</div>
+                        <div id="count-hr" class="font-mono tabular-nums text-base sm:text-lg font-bold text-blue-300 mt-0.5">0</div>
+                    </div>
+                    <div class="p-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                        <div class="text-[11px] text-amber-400 font-medium">사사구</div>
+                        <div id="count-bb" class="font-mono tabular-nums text-base sm:text-lg font-bold text-amber-300 mt-0.5">0</div>
+                    </div>
+                    <div class="p-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20 col-span-2 sm:col-span-1">
+                        <div class="text-[11px] text-rose-400 font-medium">삼진 (SO)</div>
+                        <div id="count-so" class="font-mono tabular-nums text-base sm:text-lg font-bold text-rose-300 mt-0.5">0</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 타석 결과 입력 패널 & 개인 히스토리 로그 -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                <!-- 왼쪽: 타석 결과 입력 버튼 그룹 (7컬럼) -->
+                <section class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-5">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span id="next-pa-label" class="text-emerald-300">1번째 타석</span> 결과 입력
+                        </h3>
+                        <span id="input-target-badge" class="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300">
+                            선수 기록 중
+                        </span>
+                    </div>
+
+                    <!-- 카테고리 1: 안타 (Hit) -->
+                    <div class="space-y-2.5">
+                        <span class="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <i data-lucide="zap" class="w-3.5 h-3.5"></i> 안타 (타수 포함 · 출루/장타 상승)
+                        </span>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                            <button onclick="recordAtBat('1B')"
+                                class="btn-press group flex flex-col items-center justify-center p-3.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 hover:border-emerald-400 transition-all">
+                                <span class="text-base sm:text-lg font-bold text-emerald-300 group-hover:text-emerald-200">1루타</span>
+                                <span class="text-[11px] text-emerald-400/80 mt-0.5">단타 (1루타)</span>
+                            </button>
+                            <button onclick="recordAtBat('2B')"
+                                class="btn-press group flex flex-col items-center justify-center p-3.5 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 hover:border-teal-400 transition-all">
+                                <span class="text-base sm:text-lg font-bold text-teal-300 group-hover:text-teal-200">2루타</span>
+                                <span class="text-[11px] text-teal-400/80 mt-0.5">장타 (2루타)</span>
+                            </button>
+                            <button onclick="recordAtBat('3B')"
+                                class="btn-press group flex flex-col items-center justify-center p-3.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 hover:border-cyan-400 transition-all">
+                                <span class="text-base sm:text-lg font-bold text-cyan-300 group-hover:text-cyan-200">3루타</span>
+                                <span class="text-[11px] text-cyan-400/80 mt-0.5">장타 (3루타)</span>
+                            </button>
+                            <button onclick="recordAtBat('HR')"
+                                class="btn-press group flex flex-col items-center justify-center p-3.5 rounded-xl bg-gradient-to-br from-blue-600/25 to-indigo-600/25 hover:from-blue-600/35 hover:to-indigo-600/35 border border-blue-400/40 hover:border-blue-300 transition-all shadow-sm">
+                                <span class="text-base sm:text-lg font-extrabold text-blue-300 group-hover:text-white">홈런</span>
+                                <span class="text-[11px] text-blue-300/80 mt-0.5">홈런 (4루타)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 카테고리 2: 사사구 및 희생타 (타수 미포함) -->
+                    <div class="space-y-2.5">
+                        <span class="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> 사사구 / 희생타 (타수 제외)
+                        </span>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                            <button onclick="recordAtBat('BB')"
+                                class="btn-press flex flex-col items-center justify-center p-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 hover:border-amber-400 transition-all">
+                                <span class="text-sm sm:text-base font-bold text-amber-300">볼넷 (4구)</span>
+                                <span class="text-[11px] text-amber-400/80 mt-0.5">출루율 상승</span>
+                            </button>
+                            <button onclick="recordAtBat('HBP')"
+                                class="btn-press flex flex-col items-center justify-center p-3 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 hover:border-orange-400 transition-all">
+                                <span class="text-sm sm:text-base font-bold text-orange-300">몸에 맞는 공</span>
+                                <span class="text-[11px] text-orange-400/80 mt-0.5">사구 · 출루 상승</span>
+                            </button>
+                            <button onclick="recordAtBat('SH')"
+                                class="btn-press flex flex-col items-center justify-center p-3 rounded-xl bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 hover:border-yellow-400 transition-all">
+                                <span class="text-sm sm:text-base font-bold text-yellow-200">희생번트</span>
+                                <span class="text-[11px] text-yellow-400/80 mt-0.5">타수·출루 제외</span>
+                            </button>
+                            <button onclick="recordAtBat('SF')"
+                                class="btn-press flex flex-col items-center justify-center p-3 rounded-xl bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 hover:border-yellow-400 transition-all">
+                                <span class="text-sm sm:text-base font-bold text-yellow-200">희생플라이</span>
+                                <span class="text-[11px] text-yellow-400/80 mt-0.5">타수 제외·출루 분모</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 카테고리 3: 아웃 (Out - 타수 포함) -->
+                    <div class="space-y-2.5">
+                        <span class="text-xs font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <i data-lucide="x-circle" class="w-3.5 h-3.5"></i> 아웃 (타수 포함 · 타율 하락)
+                        </span>
+                        <div class="grid grid-cols-2 gap-2.5">
+                            <button onclick="recordAtBat('OUT')"
+                                class="btn-press flex flex-col items-center justify-center p-3.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 hover:border-slate-500 transition-all">
+                                <span class="text-sm sm:text-base font-bold text-slate-200">땅볼 / 플라이 아웃</span>
+                                <span class="text-[11px] text-slate-400 mt-0.5">일반 범타 · 병살 · 실책출루</span>
+                            </button>
+                            <button onclick="recordAtBat('SO')"
+                                class="btn-press flex flex-col items-center justify-center p-3.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 hover:border-rose-400 transition-all">
+                                <span class="text-sm sm:text-base font-bold text-rose-300">삼진 아웃 (SO)</span>
+                                <span class="text-[11px] text-rose-400/80 mt-0.5">헛스윙 / 루킹 삼진</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 야구 공식 안내 툴팁 박스 -->
+                    <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 text-[11px] text-slate-400 leading-relaxed space-y-1">
+                        <div class="font-semibold text-slate-300 flex items-center gap-1.5">
+                            <i data-lucide="info" class="w-3.5 h-3.5 text-sky-400"></i> 공식 KBO/MLB 기록 산출 기준
+                        </div>
+                        <p>• <strong class="text-slate-300">타율(AVG)</strong> = 안타 ÷ 타수 (볼넷·사구·희생타는 타수에서 제외)</p>
+                        <p>• <strong class="text-slate-300">출루율(OBP)</strong> = (안타 + 볼넷 + 사구) ÷ (타수 + 볼넷 + 사구 + 희생플라이)</p>
+                        <p>• <strong class="text-slate-300">장타율(SLG)</strong> = (1루타×1 + 2루타×2 + 3루타×3 + 홈런×4) ÷ 타수</p>
+                    </div>
+                </section>
+
+                <!-- 오른쪽: 선택된 선수의 타석별 기록 히스토리 로그 (5컬럼) -->
+                <section class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col h-[500px] lg:h-[550px]">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                            <i data-lucide="history" class="w-4 h-4 text-emerald-400"></i>
+                            <span id="history-player-title">타석별 기록 로그</span>
+                        </h3>
+                        <span id="history-count-badge" class="text-xs font-mono tabular-nums px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                            총 0타석
+                        </span>
+                    </div>
+
+                    <!-- 테이블 컬럼 헤더 -->
+                    <div class="grid grid-cols-12 text-[11px] font-semibold text-slate-400 px-3 py-1.5 bg-slate-950/50 rounded-lg mb-2">
+                        <div class="col-span-2">타석</div>
+                        <div class="col-span-4">결과</div>
+                        <div class="col-span-4 text-right">누적 타율</div>
+                        <div class="col-span-2 text-right">삭제</div>
+                    </div>
+
+                    <!-- 기록 리스트 스크롤 영역 -->
+                    <div id="history-list" class="flex-1 overflow-y-auto space-y-2 pr-1">
+                        <!-- JS 동적 렌더링 -->
+                    </div>
+                </section>
+
+            </div>
+        </div>
+
+        <!-- ========================================================= -->
+        <!-- [뷰 2] 전체 선수 기록표 / 팀 리더보드 -->
+        <!-- ========================================================= -->
+        <div id="view-leaderboard" class="hidden space-y-5 animate-pop">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4 mb-4">
+                    <div>
+                        <h2 class="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                            <i data-lucide="trophy" class="w-5 h-5 text-amber-400"></i>
+                            전체 선수 타격 성적 비교표 (팀 리더보드)
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-1">선수를 클릭하면 해당 선수의 개인 기록 입력 화면으로 바로 이동합니다.</p>
+                    </div>
+
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <label for="leaderboard-sort" class="text-xs text-slate-400">정렬 기준:</label>
+                        <select id="leaderboard-sort" onchange="renderLeaderboard()"
+                            class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500">
+                            <option value="order">등록순 (타순)</option>
+                            <option value="avg">타율 (AVG) 높은순</option>
+                            <option value="ops">OPS 높은순</option>
+                            <option value="hits">안타 (H) 많은순</option>
+                            <option value="hr">홈런 (HR) 많은순</option>
+                            <option value="obp">출루율 (OBP) 높은순</option>
+                        </select>
+
+                        <button onclick="exportToCSV()"
+                            class="btn-press flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 transition-all">
+                            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                            <span>CSV 저장</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 팀 합계 요약 카드 바 -->
+                <div id="team-summary-bar" class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
+                    <!-- JS 동적 렌더링 -->
+                </div>
+
+                <!-- 반응형 성적 테이블 -->
+                <div class="overflow-x-auto rounded-xl border border-slate-800">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-950/90 text-[11px] sm:text-xs font-semibold text-slate-400 border-b border-slate-800">
+                                <th class="py-3 px-3 sm:px-4">선수 (등번호/포지션)</th>
+                                <th class="py-3 px-2.5 text-right">타석</th>
+                                <th class="py-3 px-2.5 text-right">타수</th>
+                                <th class="py-3 px-2.5 text-right text-emerald-400">안타</th>
+                                <th class="py-3 px-2.5 text-right hidden sm:table-cell">2루타</th>
+                                <th class="py-3 px-2.5 text-right hidden sm:table-cell">3루타</th>
+                                <th class="py-3 px-2.5 text-right text-blue-400">홈런</th>
+                                <th class="py-3 px-2.5 text-right text-amber-400">사사구</th>
+                                <th class="py-3 px-2.5 text-right text-rose-400 hidden md:table-cell">삼진</th>
+                                <th class="py-3 px-3 text-right font-bold text-white bg-emerald-500/5">타율</th>
+                                <th class="py-3 px-3 text-right">출루율</th>
+                                <th class="py-3 px-3 text-right hidden sm:table-cell">장타율</th>
+                                <th class="py-3 px-3 sm:px-4 text-right font-bold text-indigo-300 bg-indigo-500/5">OPS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboard-tbody" class="divide-y divide-slate-800/80 text-xs sm:text-sm font-mono tabular-nums">
+                            <!-- JS 동적 렌더링 -->
+                        </tbody>
+                        <tfoot id="leaderboard-tfoot" class="bg-slate-950/80 border-t-2 border-slate-700 text-xs sm:text-sm font-mono tabular-nums font-bold">
+                            <!-- 팀 전체 합계/평균 행 -->
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 토스트 알림 -->
+    <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 transition-all duration-300 translate-y-2">
+        <div class="bg-slate-800 text-white text-xs sm:text-sm font-medium px-4 py-2.5 rounded-full shadow-2xl border border-slate-700 flex items-center gap-2">
+            <span id="toast-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span id="toast-msg">알림 메시지</span>
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- 모달 1: 선수 추가 / 정보 수정 모달 -->
+    <!-- ========================================================= -->
+    <div id="player-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl animate-pop">
+            <div class="flex items-center justify-between mb-4">
+                <h3 id="player-modal-title" class="text-lg font-bold text-white flex items-center gap-2">
+                    <i data-lucide="user-plus" class="w-5 h-5 text-emerald-400"></i>
+                    새 선수 등록
+                </h3>
+                <button onclick="closePlayerModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="player-form" onsubmit="handlePlayerFormSubmit(event)" class="space-y-4">
+                <div>
+                    <label for="input-player-name" class="block text-xs font-semibold text-slate-300 mb-1.5">
+                        선수 이름 <span class="text-rose-400">*</span>
+                    </label>
+                    <input type="text" id="input-player-name" required maxlength="15" placeholder="예: 김도영, 오타니, 1번 타자"
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-emerald-500 transition-colors">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="input-player-number" class="block text-xs font-semibold text-slate-300 mb-1.5">
+                            등번호
+                        </label>
+                        <input type="text" id="input-player-number" maxlength="3" placeholder="예: 5"
+                            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-sm focus:outline-none focus:border-emerald-500 transition-colors">
+                    </div>
+
+                    <div>
+                        <label for="input-player-position" class="block text-xs font-semibold text-slate-300 mb-1.5">
+                            포지션
+                        </label>
+                        <select id="input-player-position"
+                            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-emerald-500 transition-colors">
+                            <option value="지명타자(DH)">지명타자 (DH)</option>
+                            <option value="투수(P)">투수 (P)</option>
+                            <option value="포수(C)">포수 (C)</option>
+                            <option value="1루수(1B)">1루수 (1B)</option>
+                            <option value="2루수(2B)">2루수 (2B)</option>
+                            <option value="3루수(3B)">3루수 (3B)</option>
+                            <option value="유격수(SS)">유격수 (SS)</option>
+                            <option value="좌익수(LF)">좌익수 (LF)</option>
+                            <option value="중견수(CF)">중견수 (CF)</option>
+                            <option value="우익수(RF)">우익수 (RF)</option>
+                            <option value="외야수(OF)">외야수 (OF)</option>
+                            <option value="내야수(IF)">내야수 (IF)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+                    <button type="button" onclick="closePlayerModal()"
+                        class="btn-press px-4 py-2 rounded-xl text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors">
+                        취소
+                    </button>
+                    <button type="submit" id="player-modal-submit-btn"
+                        class="btn-press px-5 py-2 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 transition-colors">
+                        등록하기
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- 모달 2: 확인 모달 (선수 기록 초기화 / 선수 삭제) -->
+    <!-- ========================================================= -->
+    <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-6 shadow-2xl animate-pop">
+            <div id="confirm-icon-box" class="w-11 h-11 rounded-full bg-rose-500/15 text-rose-400 flex items-center justify-center mb-4">
+                <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+            </div>
+            <h3 id="confirm-modal-title" class="text-lg font-bold text-white">확인</h3>
+            <p id="confirm-modal-desc" class="text-sm text-slate-400 mt-1.5 leading-relaxed">
+                내용
+            </p>
+            <div class="flex items-center justify-end gap-2.5 mt-6">
+                <button onclick="closeConfirmModal()"
+                    class="btn-press px-4 py-2 rounded-xl text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors">
+                    취소
+                </button>
+                <button id="confirm-modal-action-btn" onclick="executeConfirmAction()"
+                    class="btn-press px-4 py-2 rounded-xl text-sm font-semibold bg-rose-600 hover:bg-rose-500 text-white shadow-lg transition-colors">
+                    확인
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript 로직 -->
+    <script>
+        // 로컬 스토리지 키 상수 (다중 선수 버전)
+        const STORAGE_KEY = 'baseball_multi_player_tracker_v2';
+        const LEGACY_STORAGE_KEY = 'baseball_at_bat_records_v1';
+
+        // 타석 결과 유형별 메타데이터 정의
+        const OUTCOME_TYPES = {
+            '1B':  { label: '1루타',       isAB: true,  isHit: true,  bases: 1, isOnBase: true,  isSF: false, isBB: false, isSO: false, badgeClass: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+            '2B':  { label: '2루타',       isAB: true,  isHit: true,  bases: 2, isOnBase: true,  isSF: false, isBB: false, isSO: false, badgeClass: 'bg-teal-500/15 text-teal-300 border-teal-500/30' },
+            '3B':  { label: '3루타',       isAB: true,  isHit: true,  bases: 3, isOnBase: true,  isSF: false, isBB: false, isSO: false, badgeClass: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' },
+            'HR':  { label: '홈런',        isAB: true,  isHit: true,  bases: 4, isOnBase: true,  isSF: false, isBB: false, isSO: false, badgeClass: 'bg-blue-500/20 text-blue-300 border-blue-400/40 font-bold' },
+            'BB':  { label: '볼넷(4구)',   isAB: false, isHit: false, bases: 0, isOnBase: true,  isSF: false, isBB: true,  isSO: false, badgeClass: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+            'HBP': { label: '몸에 맞는 공', isAB: false, isHit: false, bases: 0, isOnBase: true,  isSF: false, isBB: true,  isSO: false, badgeClass: 'bg-orange-500/15 text-orange-300 border-orange-500/30' },
+            'SH':  { label: '희생번트',    isAB: false, isHit: false, bases: 0, isOnBase: false, isSF: false, isBB: false, isSO: false, badgeClass: 'bg-yellow-500/15 text-yellow-200 border-yellow-500/30' },
+            'SF':  { label: '희생플라이',  isAB: false, isHit: false, bases: 0, isOnBase: false, isSF: true,  isBB: false, isSO: false, badgeClass: 'bg-yellow-500/15 text-yellow-200 border-yellow-500/30' },
+            'OUT': { label: '땅볼/플라이', isAB: true,  isHit: false, bases: 0, isOnBase: false, isSF: false, isBB: false, isSO: false, badgeClass: 'bg-slate-800 text-slate-300 border-slate-600' },
+            'SO':  { label: '삼진 아웃',   isAB: true,  isHit: false, bases: 0, isOnBase: false, isSF: false, isBB: false, isSO: true,  badgeClass: 'bg-rose-500/15 text-rose-300 border-rose-500/30' }
+        };
+
+        // 전역 상태 객체
+        let appState = {
+            players: [],        // [{ id, name, number, position, records: [{ id, type }] }]
+            activePlayerId: null,
+            viewMode: 'individual' // 'individual' | 'leaderboard'
+        };
+
+        let playerModalMode = 'add'; // 'add' | 'edit'
+        let pendingConfirmType = null; // 'resetPlayer' | 'deletePlayer'
+        let toastTimeout = null;
+
+        /**
+         * 현재 선택된 선수 객체 반환
+         */
+        function getActivePlayer() {
+            if (!appState.players.length) return null;
+            let player = appState.players.find(p => p.id === appState.activePlayerId);
+            if (!player) {
+                player = appState.players[0];
+                appState.activePlayerId = player.id;
+            }
+            return player;
+        }
+
+        /**
+         * 야구 비율 포맷팅 (.333, 1.000, .000)
+         */
+        function formatBaseballStat(value) {
+            if (!isFinite(value) || isNaN(value) || value <= 0) {
+                return '.000';
+            }
+            const fixed = value.toFixed(3);
+            return fixed.startsWith('0.') ? fixed.substring(1) : fixed;
+        }
+
+        /**
+         * OPS 등급 평가 문구
+         */
+        function getOpsEvaluation(ops, pa) {
+            if (pa === 0) return '기록 대기 중';
+            if (ops >= 1.000) return '🔥 MVP급 몬스터 시즌 (1.000+)';
+            if (ops >= 0.900) return '⭐ 리그 최정상급 강타자';
+            if (ops >= 0.800) return '💪 올스타급 중심 타자';
+            if (ops >= 0.720) return '👍 리그 평균 이상의 준수한 타격';
+            if (ops >= 0.650) return '⚾ 분발이 필요한 타격 페이스';
+            return '📉 슬럼프 탈출이 필요합니다';
+        }
+
+        /**
+         * 주어진 기록 배열을 기반으로 누적 타격 스탯 계산
+         */
+        function calculateStats(records) {
+            let pa = records.length;
+            let ab = 0, h = 0, b1 = 0, b2 = 0, b3 = 0, hr = 0;
+            let tb = 0, onBaseCount = 0, sf = 0, bbHbp = 0, so = 0;
+
+            for (const rec of records) {
+                const info = OUTCOME_TYPES[rec.type];
+                if (!info) continue;
+
+                if (info.isAB) ab++;
+                if (info.isHit) {
+                    h++;
+                    tb += info.bases;
+                    if (rec.type === '1B') b1++;
+                    if (rec.type === '2B') b2++;
+                    if (rec.type === '3B') b3++;
+                    if (rec.type === 'HR') hr++;
+                }
+                if (info.isOnBase) onBaseCount++;
+                if (info.isSF) sf++;
+                if (info.isBB) bbHbp++;
+                if (info.isSO) so++;
+            }
+
+            const avg = ab > 0 ? h / ab : 0;
+            const obpDenom = ab + bbHbp + sf;
+            const obp = obpDenom > 0 ? onBaseCount / obpDenom : 0;
+            const slg = ab > 0 ? tb / ab : 0;
+            const ops = obp + slg;
+
+            return {
+                pa, ab, h, b1, b2, b3, hr, tb, onBaseCount, sf, bbHbp, so,
+                avg, obp, slg, ops
+            };
+        }
+
+        /**
+         * 선수 전환
+         */
+        function selectPlayer(playerId) {
+            appState.activePlayerId = playerId;
+            saveToStorage();
+            // 리더보드에서 선수를 클릭한 경우 개인 입력 뷰로 자동 전환
+            if (appState.viewMode === 'leaderboard') {
+                switchViewMode('individual');
+            } else {
+                renderAll(false);
+            }
+        }
+
+        /**
+         * 화면 뷰 모드 전환 (개인 기록 입력 vs 전체 팀 성적표)
+         */
+        function switchViewMode(mode) {
+            appState.viewMode = mode;
+            const indView = document.getElementById('view-individual');
+            const lbView = document.getElementById('view-leaderboard');
+            const tabInd = document.getElementById('tab-view-individual');
+            const tabLb = document.getElementById('tab-view-leaderboard');
+
+            if (mode === 'individual') {
+                indView.classList.remove('hidden');
+                lbView.classList.add('hidden');
+                tabInd.className = 'px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-emerald-600 text-white shadow';
+                tabLb.className = 'px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-white flex items-center gap-1';
+                renderAll(false);
+            } else {
+                indView.classList.add('hidden');
+                lbView.classList.remove('hidden');
+                tabInd.className = 'px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-white';
+                tabLb.className = 'px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-indigo-600 text-white shadow flex items-center gap-1';
+                renderPlayerTabs();
+                renderLeaderboard();
+            }
+        }
+
+        /**
+         * 현재 선택된 선수에게 타석 결과 추가
+         */
+        function recordAtBat(type) {
+            const player = getActivePlayer();
+            if (!player || !OUTCOME_TYPES[type]) return;
+
+            player.records.push({
+                id: Date.now() + Math.random(),
+                type: type
+            });
+
+            saveToStorage();
+            renderAll(true);
+
+            const info = OUTCOME_TYPES[type];
+            showToast(
+                `[${player.name}] ${player.records.length}타석: ${info.label}`,
+                info.isHit ? 'emerald' : (info.isOnBase ? 'amber' : 'rose')
+            );
+        }
+
+        /**
+         * 현재 선수의 직전 타석 취소 (Undo)
+         */
+        function undoLastAtBat() {
+            const player = getActivePlayer();
+            if (!player || player.records.length === 0) return;
+
+            const removed = player.records.pop();
+            saveToStorage();
+            renderAll(false);
+            showToast(`[${player.name}] 직전 기록(${OUTCOME_TYPES[removed.type].label}) 취소됨`, 'slate');
+        }
+
+        /**
+         * 현재 선수의 특정 인덱스 타석 기록 삭제
+         */
+        function deleteAtBatAtIndex(index) {
+            const player = getActivePlayer();
+            if (!player || index < 0 || index >= player.records.length) return;
+
+            const removed = player.records.splice(index, 1)[0];
+            saveToStorage();
+            renderAll(false);
+            showToast(`[${player.name}] ${index + 1}번째 타석(${OUTCOME_TYPES[removed.type].label}) 삭제됨`, 'slate');
+        }
+
+        /**
+         * 선수 추가 / 수정 모달 제어
+         */
+        function openPlayerModal(mode) {
+            playerModalMode = mode;
+            const modal = document.getElementById('player-modal');
+            const titleEl = document.getElementById('player-modal-title');
+            const submitBtn = document.getElementById('player-modal-submit-btn');
+            const nameInput = document.getElementById('input-player-name');
+            const numInput = document.getElementById('input-player-number');
+            const posSelect = document.getElementById('input-player-position');
+
+            if (mode === 'add') {
+                titleEl.innerHTML = `<i data-lucide="user-plus" class="w-5 h-5 text-emerald-400"></i> 새 선수 등록`;
+                submitBtn.textContent = '등록하기';
+                nameInput.value = '';
+                numInput.value = '';
+                posSelect.value = '지명타자(DH)';
+            } else {
+                const player = getActivePlayer();
+                if (!player) return;
+                titleEl.innerHTML = `<i data-lucide="edit-3" class="w-5 h-5 text-sky-400"></i> 선수 정보 수정`;
+                submitBtn.textContent = '저장하기';
+                nameInput.value = player.name;
+                numInput.value = player.number || '';
+                posSelect.value = player.position || '지명타자(DH)';
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            lucide.createIcons();
+            setTimeout(() => nameInput.focus(), 50);
+        }
+
+        function closePlayerModal() {
+            const modal = document.getElementById('player-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function handlePlayerFormSubmit(e) {
+            e.preventDefault();
+            const name = document.getElementById('input-player-name').value.trim();
+            const number = document.getElementById('input-player-number').value.trim() || '-';
+            const position = document.getElementById('input-player-position').value;
+
+            if (!name) return;
+
+            if (playerModalMode === 'add') {
+                const newPlayer = {
+                    id: 'player_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                    name,
+                    number,
+                    position,
+                    records: []
+                };
+                appState.players.push(newPlayer);
+                appState.activePlayerId = newPlayer.id;
+                saveToStorage();
+                closePlayerModal();
+                switchViewMode('individual');
+                showToast(`새 선수 [${name}] 등록 완료!`, 'emerald');
+            } else {
+                const player = getActivePlayer();
+                if (player) {
+                    player.name = name;
+                    player.number = number;
+                    player.position = position;
+                    saveToStorage();
+                    closePlayerModal();
+                    renderAll(false);
+                    if (appState.viewMode === 'leaderboard') renderLeaderboard();
+                    showToast(`[${name}] 선수 정보가 수정되었습니다.`, 'sky');
+                }
+            }
+        }
+
+        /**
+         * 확인 모달 제어 (기록 초기화 / 선수 삭제)
+         */
+        function openConfirmModal(type) {
+            const player = getActivePlayer();
+            if (!player) return;
+
+            if (type === 'deletePlayer' && appState.players.length <= 1) {
+                showToast('최소 1명의 선수는 유지되어야 합니다.', 'rose');
+                return;
+            }
+
+            pendingConfirmType = type;
+            const modal = document.getElementById('confirm-modal');
+            const titleEl = document.getElementById('confirm-modal-title');
+            const descEl = document.getElementById('confirm-modal-desc');
+            const actionBtn = document.getElementById('confirm-modal-action-btn');
+
+            if (type === 'resetPlayer') {
+                titleEl.textContent = `[${player.name}] 기록을 초기화할까요?`;
+                descEl.textContent = `${player.name} 선수의 누적된 모든 타석 기록과 타율 통계가 0으로 초기화됩니다. 선수 프로필은 유지됩니다.`;
+                actionBtn.textContent = '기록 초기화';
+                actionBtn.className = 'btn-press px-4 py-2 rounded-xl text-sm font-semibold bg-amber-600 hover:bg-amber-500 text-white shadow-lg transition-colors';
+            } else if (type === 'deletePlayer') {
+                titleEl.textContent = `[${player.name}] 선수를 삭제할까요?`;
+                descEl.textContent = `선수의 프로필과 지금까지 기록된 모든 타석 데이터가 영구적으로 삭제됩니다.`;
+                actionBtn.textContent = '선수 삭제';
+                actionBtn.className = 'btn-press px-4 py-2 rounded-xl text-sm font-semibold bg-rose-600 hover:bg-rose-500 text-white shadow-lg transition-colors';
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeConfirmModal() {
+            const modal = document.getElementById('confirm-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            pendingConfirmType = null;
+        }
+
+        function executeConfirmAction() {
+            const player = getActivePlayer();
+            if (!player) return;
+
+            if (pendingConfirmType === 'resetPlayer') {
+                player.records = [];
+                saveToStorage();
+                renderAll(false);
+                showToast(`[${player.name}] 선수의 기록이 초기화되었습니다.`, 'amber');
+            } else if (pendingConfirmType === 'deletePlayer') {
+                const deletedName = player.name;
+                appState.players = appState.players.filter(p => p.id !== player.id);
+                appState.activePlayerId = appState.players[0].id;
+                saveToStorage();
+                renderAll(false);
+                if (appState.viewMode === 'leaderboard') renderLeaderboard();
+                showToast(`[${deletedName}] 선수가 삭제되었습니다.`, 'rose');
+            }
+            closeConfirmModal();
+        }
+
+        /**
+         * 상단 선수 선택 탭 목록 렌더링
+         */
+        function renderPlayerTabs() {
+            const container = document.getElementById('player-tabs-container');
+            const activePlayer = getActivePlayer();
+
+            container.innerHTML = appState.players.map(p => {
+                const stats = calculateStats(p.records);
+                const isSelected = activePlayer && p.id === activePlayer.id;
+                const avgText = formatBaseballStat(stats.avg);
+
+                return `
+                    <button onclick="selectPlayer('${p.id}')"
+                        class="btn-press shrink-0 flex items-center gap-2.5 px-3 py-1.5 rounded-xl border text-left transition-all ${
+                            isSelected
+                                ? 'bg-slate-800 border-emerald-500/70 shadow-md shadow-emerald-950/50'
+                                : 'bg-slate-900/70 border-slate-800 hover:bg-slate-800/60 hover:border-slate-700 opacity-80 hover:opacity-100'
+                        }">
+                        <span class="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded ${
+                            isSelected ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400'
+                        }">
+                            ${p.number || '-'}
+                        </span>
+                        <div>
+                            <div class="text-xs font-bold ${isSelected ? 'text-white' : 'text-slate-300'} flex items-center gap-1.5">
+                                <span>${escapeHtml(p.name)}</span>
+                                <span class="font-mono tabular-nums text-[11px] ${isSelected ? 'text-emerald-400' : 'text-slate-400'}">
+                                    ${avgText}
+                                </span>
+                            </div>
+                            <div class="text-[10px] text-slate-400 font-mono tabular-nums">
+                                ${stats.h}안타/${stats.ab}타수
+                            </div>
+                        </div>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        /**
+         * 개인 기록 화면 전체 렌더링
+         */
+        function renderAll(scrollToLatest = false) {
+            renderPlayerTabs();
+
+            const player = getActivePlayer();
+            if (!player) return;
+
+            const stats = calculateStats(player.records);
+
+            // 1. 선택된 선수 배너 정보 업데이트
+            document.getElementById('active-player-number').textContent = player.number || '-';
+            document.getElementById('active-player-name').textContent = player.name;
+            document.getElementById('active-player-position').textContent = player.position || '타자';
+            document.getElementById('active-player-summary-line').textContent =
+                `${stats.pa}타석 ${stats.ab}타수 ${stats.h}안타 (${stats.hr}홈런 · ${stats.bbHbp}사사구)`;
+
+            // 2. 메인 4대 지표 업데이트
+            document.getElementById('stat-avg').textContent = formatBaseballStat(stats.avg);
+            document.getElementById('stat-avg-sub').textContent = `${stats.h}안타 / ${stats.ab}타수`;
+
+            document.getElementById('stat-obp').textContent = formatBaseballStat(stats.obp);
+            document.getElementById('stat-obp-sub').textContent = `총 출루 ${stats.onBaseCount}회`;
+
+            document.getElementById('stat-slg').textContent = formatBaseballStat(stats.slg);
+            document.getElementById('stat-slg-sub').textContent = `총 ${stats.tb}루타`;
+
+            document.getElementById('stat-ops').textContent = formatBaseballStat(stats.ops);
+            document.getElementById('stat-ops-grade').textContent = getOpsEvaluation(stats.ops, stats.pa);
+
+            // 3. 세부 카운트 업데이트
+            document.getElementById('count-pa').textContent = stats.pa;
+            document.getElementById('count-ab').textContent = stats.ab;
+            document.getElementById('count-h').textContent = stats.h;
+            document.getElementById('count-xbh').textContent = `${stats.b2} / ${stats.b3}`;
+            document.getElementById('count-hr').textContent = stats.hr;
+            document.getElementById('count-bb').textContent = stats.bbHbp;
+            document.getElementById('count-so').textContent = stats.so;
+
+            // 4. 입력 패널 및 버튼 상태 업데이트
+            document.getElementById('next-pa-label').textContent = `${stats.pa + 1}번째 타석`;
+            document.getElementById('input-target-badge').textContent = `No.${player.number || '-'} ${player.name}`;
+            document.getElementById('history-player-title').textContent = `${player.name} 타석 로그`;
+            document.getElementById('history-count-badge').textContent = `총 ${stats.pa}타석`;
+
+            const hasRecords = player.records.length > 0;
+            document.getElementById('btn-undo').disabled = !hasRecords;
+            document.getElementById('btn-reset-player').disabled = !hasRecords;
+            document.getElementById('btn-delete-player').disabled = appState.players.length <= 1;
+
+            // 5. 타석별 히스토리 로그 렌더링
+            const historyListEl = document.getElementById('history-list');
+
+            if (!hasRecords) {
+                historyListEl.innerHTML = `
+                    <div class="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500">
+                        <div class="w-12 h-12 rounded-full bg-slate-800/80 flex items-center justify-center mb-3">
+                            <i data-lucide="clipboard-list" class="w-6 h-6 text-slate-400"></i>
+                        </div>
+                        <p class="text-sm font-medium text-slate-300">[${escapeHtml(player.name)}] 선수의 타석 기록이 없습니다</p>
+                        <p class="text-xs text-slate-500 mt-1">왼쪽 버튼을 눌러 첫 번째 타석 결과를 기록해보세요!</p>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
+            let runningAB = 0;
+            let runningH = 0;
+            const rowsHtml = player.records.map((rec, idx) => {
+                const info = OUTCOME_TYPES[rec.type];
+                if (info.isAB) runningAB++;
+                if (info.isHit) runningH++;
+
+                const cumulativeAvg = runningAB > 0 ? formatBaseballStat(runningH / runningAB) : '.000';
+                const isLatest = idx === player.records.length - 1;
+
+                return `
+                    <div class="grid grid-cols-12 items-center px-3 py-2.5 rounded-xl border ${isLatest ? 'bg-slate-800/90 border-emerald-500/40 animate-pop' : 'bg-slate-950/50 border-slate-800/80 hover:bg-slate-800/40'} transition-colors">
+                        <div class="col-span-2 font-mono tabular-nums text-xs font-bold ${isLatest ? 'text-emerald-400' : 'text-slate-400'}">
+                            #${idx + 1}
+                        </div>
+                        <div class="col-span-4">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium border ${info.badgeClass}">
+                                ${info.label}
+                            </span>
+                        </div>
+                        <div class="col-span-4 text-right font-mono tabular-nums">
+                            <span class="text-sm font-bold ${isLatest ? 'text-white' : 'text-slate-200'}">${cumulativeAvg}</span>
+                            <span class="text-[10px] text-slate-500 block">(${runningH}/${runningAB})</span>
+                        </div>
+                        <div class="col-span-2 text-right">
+                            <button onclick="deleteAtBatAtIndex(${idx})"
+                                class="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                                title="${idx + 1}번째 타석 삭제">
+                                <svg class="w-4 h-4 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M18 6 6 18"></path>
+                                    <path d="m6 6 12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            historyListEl.innerHTML = rowsHtml.reverse().join('');
+
+            if (scrollToLatest) {
+                historyListEl.scrollTop = 0;
+            }
+        }
+
+        /**
+         * 전체 팀 리더보드(비교표) 렌더링
+         */
+        function renderLeaderboard() {
+            const sortBy = document.getElementById('leaderboard-sort').value;
+            const playerStatsList = appState.players.map((p, index) => ({
+                player: p,
+                originalIndex: index,
+                stats: calculateStats(p.records)
+            }));
+
+            // 정렬 적용
+            if (sortBy === 'avg') {
+                playerStatsList.sort((a, b) => b.stats.avg - a.stats.avg || b.stats.h - a.stats.h);
+            } else if (sortBy === 'ops') {
+                playerStatsList.sort((a, b) => b.stats.ops - a.stats.ops || b.stats.avg - a.stats.avg);
+            } else if (sortBy === 'hits') {
+                playerStatsList.sort((a, b) => b.stats.h - a.stats.h || b.stats.avg - a.stats.avg);
+            } else if (sortBy === 'hr') {
+                playerStatsList.sort((a, b) => b.stats.hr - a.stats.hr || b.stats.slg - a.stats.slg);
+            } else if (sortBy === 'obp') {
+                playerStatsList.sort((a, b) => b.stats.obp - a.stats.obp || b.stats.avg - a.stats.avg);
+            }
+
+            // 팀 전체 누적 합산 계산
+            const allRecords = appState.players.flatMap(p => p.records);
+            const teamStats = calculateStats(allRecords);
+
+            // 팀 요약 카드 업데이트
+            document.getElementById('team-summary-bar').innerHTML = `
+                <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+                    <div class="text-[11px] text-slate-400">등록 선수</div>
+                    <div class="font-mono tabular-nums text-xl font-bold text-white mt-0.5">${appState.players.length}명</div>
+                </div>
+                <div class="bg-slate-950/70 border border-emerald-500/20 rounded-xl p-3">
+                    <div class="text-[11px] text-emerald-400">팀 타율 (AVG)</div>
+                    <div class="font-mono tabular-nums text-xl font-extrabold text-emerald-300 mt-0.5">${formatBaseballStat(teamStats.avg)}</div>
+                </div>
+                <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+                    <div class="text-[11px] text-amber-400">팀 출루율 (OBP)</div>
+                    <div class="font-mono tabular-nums text-xl font-bold text-amber-300 mt-0.5">${formatBaseballStat(teamStats.obp)}</div>
+                </div>
+                <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+                    <div class="text-[11px] text-sky-400">팀 장타율 (SLG)</div>
+                    <div class="font-mono tabular-nums text-xl font-bold text-sky-300 mt-0.5">${formatBaseballStat(teamStats.slg)}</div>
+                </div>
+                <div class="bg-slate-950/70 border border-indigo-500/20 rounded-xl p-3 col-span-2 sm:col-span-1">
+                    <div class="text-[11px] text-indigo-400">팀 OPS</div>
+                    <div class="font-mono tabular-nums text-xl font-extrabold text-indigo-300 mt-0.5">${formatBaseballStat(teamStats.ops)}</div>
+                </div>
+            `;
+
+            // 테이블 본문 렌더링
+            const tbody = document.getElementById('leaderboard-tbody');
+            tbody.innerHTML = playerStatsList.map((item, rankIdx) => {
+                const { player, stats } = item;
+                const isTopRank = sortBy !== 'order' && rankIdx === 0 && stats.pa > 0;
+
+                return `
+                    <tr onclick="selectPlayer('${player.id}')"
+                        class="hover:bg-slate-800/60 cursor-pointer transition-colors group">
+                        <td class="py-3 px-3 sm:px-4 font-sans">
+                            <div class="flex items-center gap-2.5">
+                                <span class="font-mono text-xs font-bold w-6 h-6 rounded-lg bg-slate-800 text-slate-300 flex items-center justify-center shrink-0 group-hover:bg-emerald-500 group-hover:text-slate-950 transition-colors">
+                                    ${escapeHtml(player.number || '-')}
+                                </span>
+                                <div>
+                                    <div class="font-bold text-slate-100 group-hover:text-emerald-300 transition-colors flex items-center gap-1.5">
+                                        <span>${escapeHtml(player.name)}</span>
+                                        ${isTopRank ? '<span class="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">1위</span>' : ''}
+                                    </div>
+                                    <div class="text-[11px] text-slate-500">${escapeHtml(player.position || '')}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-3 px-2.5 text-right text-slate-300">${stats.pa}</td>
+                        <td class="py-3 px-2.5 text-right text-slate-300">${stats.ab}</td>
+                        <td class="py-3 px-2.5 text-right font-bold text-emerald-300">${stats.h}</td>
+                        <td class="py-3 px-2.5 text-right text-slate-400 hidden sm:table-cell">${stats.b2}</td>
+                        <td class="py-3 px-2.5 text-right text-slate-400 hidden sm:table-cell">${stats.b3}</td>
+                        <td class="py-3 px-2.5 text-right font-bold text-blue-300">${stats.hr}</td>
+                        <td class="py-3 px-2.5 text-right text-amber-300">${stats.bbHbp}</td>
+                        <td class="py-3 px-2.5 text-right text-rose-300 hidden md:table-cell">${stats.so}</td>
+                        <td class="py-3 px-3 text-right font-extrabold text-white bg-emerald-500/5">${formatBaseballStat(stats.avg)}</td>
+                        <td class="py-3 px-3 text-right text-slate-200">${formatBaseballStat(stats.obp)}</td>
+                        <td class="py-3 px-3 text-right text-slate-200 hidden sm:table-cell">${formatBaseballStat(stats.slg)}</td>
+                        <td class="py-3 px-3 sm:px-4 text-right font-extrabold text-indigo-300 bg-indigo-500/5">${formatBaseballStat(stats.ops)}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            // 팀 합계 행
+            document.getElementById('leaderboard-tfoot').innerHTML = `
+                <tr>
+                    <td class="py-3 px-3 sm:px-4 font-sans text-slate-200">팀 전체 합계 / 평균</td>
+                    <td class="py-3 px-2.5 text-right text-white">${teamStats.pa}</td>
+                    <td class="py-3 px-2.5 text-right text-white">${teamStats.ab}</td>
+                    <td class="py-3 px-2.5 text-right text-emerald-400">${teamStats.h}</td>
+                    <td class="py-3 px-2.5 text-right text-slate-300 hidden sm:table-cell">${teamStats.b2}</td>
+                    <td class="py-3 px-2.5 text-right text-slate-300 hidden sm:table-cell">${teamStats.b3}</td>
+                    <td class="py-3 px-2.5 text-right text-blue-400">${teamStats.hr}</td>
+                    <td class="py-3 px-2.5 text-right text-amber-400">${teamStats.bbHbp}</td>
+                    <td class="py-3 px-2.5 text-right text-rose-400 hidden md:table-cell">${teamStats.so}</td>
+                    <td class="py-3 px-3 text-right text-emerald-300 bg-emerald-500/10">${formatBaseballStat(teamStats.avg)}</td>
+                    <td class="py-3 px-3 text-right text-white">${formatBaseballStat(teamStats.obp)}</td>
+                    <td class="py-3 px-3 text-right text-white hidden sm:table-cell">${formatBaseballStat(teamStats.slg)}</td>
+                    <td class="py-3 px-3 sm:px-4 text-right text-indigo-300 bg-indigo-500/10">${formatBaseballStat(teamStats.ops)}</td>
+                </tr>
+            `;
+        }
+
+        /**
+         * 전체 선수 기록 CSV 파일 내보내기
+         */
+        function exportToCSV() {
+            const headers = ['등번호', '선수명', '포지션', '타석(PA)', '타수(AB)', '안타(H)', '1루타', '2루타', '3루타', '홈런(HR)', '사사구', '삼진(SO)', '타율(AVG)', '출루율(OBP)', '장타율(SLG)', 'OPS'];
+            const rows = appState.players.map(p => {
+                const s = calculateStats(p.records);
+                return [
+                    `"${p.number || '-'}"`,
+                    `"${p.name}"`,
+                    `"${p.position || ''}"`,
+                    s.pa, s.ab, s.h, s.b1, s.b2, s.b3, s.hr, s.bbHbp, s.so,
+                    formatBaseballStat(s.avg),
+                    formatBaseballStat(s.obp),
+                    formatBaseballStat(s.slg),
+                    formatBaseballStat(s.ops)
+                ].join(',');
+            });
+
+            // UTF-8 BOM 추가 (엑셀 한글 깨짐 방지)
+            const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const today = new Date().toISOString().slice(0, 10);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `야구_선수별_타격기록_${today}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            showToast('선수별 타격 기록 CSV 파일이 다운로드되었습니다.', 'sky');
+        }
+
+        /**
+         * 로컬 스토리지 저장 & 불러오기 (기존 단일 선수 데이터 마이그레이션 포함)
+         */
+        function saveToStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                    players: appState.players,
+                    activePlayerId: appState.activePlayerId
+                }));
+            } catch (e) {
+                console.error('저장 오류:', e);
+            }
+        }
+
+        function loadFromStorage() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (parsed && Array.isArray(parsed.players) && parsed.players.length > 0) {
+                        appState.players = parsed.players;
+                        appState.activePlayerId = parsed.activePlayerId || parsed.players[0].id;
+                        return;
+                    }
+                }
+
+                // 기존 버전 기록이 있으면 첫 번째 선수로 마이그레이션
+                const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+                let legacyRecords = [];
+                if (legacy) {
+                    const parsedLegacy = JSON.parse(legacy);
+                    if (Array.isArray(parsedLegacy)) legacyRecords = parsedLegacy;
+                }
+
+                // 초기 기본 선수 세팅 (바로 사용 가능하도록 3명 제공)
+                appState.players = [
+                    {
+                        id: 'player_default_1',
+                        name: '1번 타자',
+                        number: '1',
+                        position: '중견수(CF)',
+                        records: legacyRecords
+                    },
+                    {
+                        id: 'player_default_2',
+                        name: '3번 타자',
+                        number: '5',
+                        position: '3루수(3B)',
+                        records: []
+                    },
+                    {
+                        id: 'player_default_3',
+                        name: '4번 타자',
+                        number: '10',
+                        position: '1루수(1B)',
+                        records: []
+                    }
+                ];
+                appState.activePlayerId = appState.players[0].id;
+                saveToStorage();
+            } catch (e) {
+                console.error('불러오기 오류:', e);
+            }
+        }
+
+        /**
+         * HTML 이스케이프 헬퍼
+         */
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        /**
+         * 하단 토스트 메시지
+         */
+        function showToast(message, colorType = 'emerald') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-msg');
+            const toastDot = document.getElementById('toast-dot');
+
+            toastMsg.textContent = message;
+            toastDot.className = 'w-2 h-2 rounded-full ' + (
+                colorType === 'emerald' ? 'bg-emerald-400' :
+                colorType === 'amber' ? 'bg-amber-400' :
+                colorType === 'sky' ? 'bg-sky-400' :
+                colorType === 'rose' ? 'bg-rose-400' : 'bg-slate-400'
+            );
+
+            toast.classList.remove('opacity-0', 'translate-y-2');
+            toast.classList.add('opacity-100', 'translate-y-0');
+
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-2');
+            }, 2200);
+        }
+
+        // 초기 실행
+        window.addEventListener('DOMContentLoaded', () => {
+            loadFromStorage();
+            renderAll(false);
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>
